@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocusFlow | Time Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6c5ce7">
+</head>
+<body>
+    <div class="container">
+        <div class="auth-section">
+            <button id="loginBtn">Login with Google</button>
+            <div id="userInfo" style="display: none;">
+                <span id="userName"></span>
+                <button id="logoutBtn">Logout</button>
+            </div>
+        </div>
+
+        <div class="settings-container">
+            <button id="settingsBtn">⚙️ Settings</button>
+            <div id="settingsMenu" class="hidden">
+                <h4>Theme Color</h4>
+                <div class="theme-options">
+                    <div class="theme-circle" data-color="#6c5ce7" style="background: #6c5ce7;"></div>
+                    <div class="theme-circle" data-color="#ff7675" style="background: #ff7675;"></div>
+                    <div class="theme-circle" data-color="#00b894" style="background: #00b894;"></div>
+                    <div class="theme-circle" data-color="#0984e3" style="background: #0984e3;"></div>
+                </div>
+            </div>
+        </div>
+
+        <h1>FocusFlow</h1>
+        
+        <div class="mode-switch">
+            <button id="manualModeBtn" class="active" onclick="setMode('manual')">Manual Timer</button>
+            <button id="pomoModeBtn" onclick="setMode('pomodoro')">Pomodoro (25m)</button>
+        </div>
+
+        <div class="timer-card">
+            <input type="text" id="taskInput" placeholder="What are you working on?">
+            
+            <select id="categorySelect">
+                <option value="Work" data-color="#3498db">Work (Blue)</option>
+                <option value="Study" data-color="#9b59b6">Study (Purple)</option>
+                <option value="Personal" data-color="#2ecc71">Personal (Green)</option>
+                <option value="Other" data-color="#95a5a6">Other (Gray)</option>
+            </select>
+
+            <div id="display">00:00:00</div>
+            
+            <div class="controls">
+                <button id="startBtn" onclick="start()">Start</button>
+                <button id="stopBtn" onclick="stop()" disabled>Stop</button>
+            </div>
+        </div>
+
+        <div class="history">
+            <div class="history-header">
+                <h3>Recent Activity</h3>
+                <input type="text" id="searchInput" placeholder="Search tasks..." onkeyup="filterLogs()">
+            </div>
+            
+            <table id="logTable">
+                <thead>
+                    <tr>
+                        <th>Task</th>
+                        <th>Category</th>
+                        <th>Duration</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="logBody"></tbody>
+            </table>
+            <button class="clear-btn" onclick="clearLogs()">Clear All History</button>
+        </div>
+    </div>
+
+    <script type="module">
+    // 1. PWA Service Worker Registration
+    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log("SW path issue:", err));
+        });
+    }
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyCqty486KMyFKk05ET8Ge7S-p3pa8KFFac",
+        authDomain: "focusflow-d80eb.firebaseapp.com",
+        projectId: "focusflow-d80eb",
+        storageBucket: "focusflow-d80eb.firebasestorage.app",
+        messagingSenderId: "121716338116",
+        appId: "1:121716338116:web:959a3cda178f6357e04891",
+        measurementId: "G-NEX68TPCHR"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const db = getFirestore();
+    const provider = new GoogleAuthProvider();
+
+    // Exporting to window so script.js can see them
+    window.auth = auth;
+    window.db = db;
+    window.doc = doc;
+    window.setDoc = setDoc;
+    window.getDoc = getDoc;
+
+    document.getElementById('loginBtn').onclick = () => signInWithPopup(auth, provider);
+    document.getElementById('logoutBtn').onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, async (user) => {
+        const loginBtn = document.getElementById('loginBtn');
+        const userInfo = document.getElementById('userInfo');
+        const userName = document.getElementById('userName');
+
+        if (user) {
+            loginBtn.style.display = 'none';
+            userInfo.style.display = 'flex';
+            userName.innerText = user.displayName;
+            
+            try {
+                const docSnap = await getDoc(doc(db, "users", user.uid));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    // Theme Sync
+                    if (data.themeColor) {
+                        document.documentElement.style.setProperty('--primary', data.themeColor);
+                    }
+
+                    // Data Sync: Only update localStorage if Cloud has data
+                    if (data.timeLogs && data.timeLogs.length > 0) {
+                        localStorage.setItem("timeLogs", JSON.stringify(data.timeLogs));
+                        // Small delay to ensure script.js has loaded
+                        setTimeout(() => {
+                            if (typeof window.displayLogs === 'function') window.displayLogs();
+                        }, 100);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+            }
+        } else {
+            loginBtn.style.display = 'block';
+            userInfo.style.display = 'none';
+            // Optional: Clear local storage on logout if you want privacy
+            // localStorage.removeItem("timeLogs"); 
+        }
+    });
+</script>
+
+    <script src="script.js"></script>
+</body>
+</html>
